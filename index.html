@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CashX → Acumatica | AR &amp; AP upload builder</title>
+<meta name="description" content="Drop a CashX export and get the Acumatica AR Invoice and AP Bill upload files, filled and ready.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='56' height='56' rx='16' fill='%232B4BF2'/><rect x='36' y='36' width='56' height='56' rx='16' fill='%230F8B7D' fill-opacity='.9'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+:root{
+  --bg:#E9EEF7;
+  --paper:#ffffff;
+  --ink:#0F1B3D;
+  --ink-2:#4A5675;
+  --ink-3:#7C88A6;
+  --line:#D5DCEC;
+  --ar:#2B4BF2;
+  --ar-soft:#E4E9FF;
+  --ap:#0F8B7D;
+  --ap-soft:#DDF3EF;
+  --warn:#B86E00;
+  --warn-soft:#FFF1D6;
+  --ok:#12805C;
+  --radius:22px;
+  --display:"Bricolage Grotesque",system-ui,sans-serif;
+  --body:"Hanken Grotesk",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--body);-webkit-font-smoothing:antialiased;min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--ar);outline-offset:3px;border-radius:8px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- top bar ---------- */
+.top{max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:12px;font:700 19px var(--display);letter-spacing:-.01em}
+.mark{width:34px;height:34px;position:relative;flex:none}
+.mark i{position:absolute;width:21px;height:21px;border-radius:7px}
+.mark i:first-child{left:0;top:0;background:var(--ar)}
+.mark i:last-child{right:0;bottom:0;background:var(--ap);opacity:.92}
+.ghost{background:transparent;border:1.5px solid var(--line);border-radius:999px;padding:9px 18px;font-weight:600;font-size:15px;display:inline-flex;gap:8px;align-items:center;transition:border-color .15s,background .15s}
+.ghost:hover{border-color:var(--ink);background:#fff}
+
+/* ---------- hero ---------- */
+main{max-width:1180px;margin:0 auto;padding:0 28px 80px}
+.hero{padding:34px 0 30px;max-width:980px}
+h1{font:800 clamp(2.5rem,5.6vw,4.6rem)/.98 var(--display);letter-spacing:-.035em}
+h1 span{color:var(--ar)}
+.lede{margin-top:20px;font-size:1.15rem;color:var(--ink-2);max-width:60ch}
+
+/* ---------- drop zone ---------- */
+.drop{position:relative;background:var(--paper);border:2px dashed #AEBBDD;border-radius:30px;min-height:290px;display:grid;place-items:center;text-align:center;padding:34px;cursor:pointer;transition:border-color .2s,background .2s,transform .2s,min-height .35s,padding .35s}
+.drop:hover{border-color:var(--ar)}
+.drop.over{border-style:solid;border-color:var(--ar);background:var(--ar-soft);transform:scale(1.012)}
+.drop .view{display:none;width:100%}
+.drop[data-state=idle] .v-idle,.drop[data-state=busy] .v-busy,.drop[data-state=ready] .v-ready,.drop[data-state=error] .v-idle{display:block}
+.drop[data-state=ready]{min-height:0;padding:18px 24px;border-style:solid;border-color:var(--line);cursor:default}
+.sheets{width:92px;height:84px;margin:0 auto 18px;position:relative}
+.sheets i{position:absolute;width:58px;height:72px;border-radius:12px;border:2px solid var(--ink);background:#fff}
+.sheets i:nth-child(1){left:0;top:10px;transform:rotate(-8deg);border-color:var(--ar);background:var(--ar-soft)}
+.sheets i:nth-child(2){right:0;top:0;transform:rotate(7deg);border-color:var(--ap);background:var(--ap-soft)}
+.sheets i::after{content:"";position:absolute;left:10px;right:10px;top:18px;height:3px;border-radius:2px;background:currentColor;opacity:.35;box-shadow:0 11px 0 currentColor,0 22px 0 currentColor}
+.sheets i:nth-child(1){color:var(--ar)}.sheets i:nth-child(2){color:var(--ap)}
+.drop h2{font:700 1.7rem/1.15 var(--display);letter-spacing:-.02em}
+.drop p{color:var(--ink-2);margin-top:8px}
+.drop u{text-decoration-color:var(--ar);text-underline-offset:4px;text-decoration-thickness:2px;font-weight:600;color:var(--ink)}
+.err{margin:18px auto 0;max-width:560px;background:#FDE8E8;color:#9B1C1C;border-radius:14px;padding:12px 16px;font-weight:500;display:none}
+.drop[data-state=error] .err{display:block}
+
+.steps{list-style:none;padding:0;display:inline-grid;gap:12px;text-align:left}
+.steps li{display:flex;align-items:center;gap:12px;font-weight:600;color:var(--ink-3);transition:color .2s}
+.steps li b{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;transition:all .2s;font-size:13px;color:#fff}
+.steps li.run{color:var(--ink)}
+.steps li.run b{border-color:var(--ar);border-top-color:transparent;animation:spin .7s linear infinite}
+.steps li.done{color:var(--ink)}
+.steps li.done b{background:var(--ok);border-color:var(--ok)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.filebar{display:flex;align-items:center;gap:16px;text-align:left;flex-wrap:wrap}
+.filebar .ic{width:44px;height:44px;border-radius:13px;background:var(--ar-soft);display:grid;place-items:center;color:var(--ar);flex:none}
+.filebar .meta{flex:1;min-width:200px}
+.filebar .meta strong{display:block;font-weight:700;overflow-wrap:anywhere}
+.filebar .meta span{color:var(--ink-2);font-size:14.5px}
+
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:26px}
+.facts div{padding:4px 2px;border-top:2px solid var(--ink)}
+.facts strong{display:block;margin-top:10px;font:700 1.05rem var(--display)}
+.facts span{color:var(--ink-2);font-size:15px}
+.facts.hide{display:none}
+
+/* ---------- results ---------- */
+#results{margin-top:34px}
+#results[hidden]{display:none}
+.tickets{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.ticket{--c:var(--ar);position:relative;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.ticket.ap{--c:var(--ap)}
+.printing .ticket{animation:print .85s cubic-bezier(.2,.8,.2,1) both}
+.printing .ticket.ap{animation-delay:.12s}
+@keyframes print{from{clip-path:inset(0 0 100% 0);transform:translateY(-22px)}to{clip-path:inset(0);transform:none}}
+.ticket .head{background:var(--c);color:#fff;padding:24px 28px 26px}
+.ticket .kind{font-weight:600;opacity:.88;font-size:15px}
+.ticket .big{font:800 clamp(3rem,5vw,4.2rem)/1 var(--display);letter-spacing:-.04em;margin-top:6px}
+.ticket .big small{font:600 1.05rem var(--body);letter-spacing:0;margin-left:10px;opacity:.9}
+.perf{position:relative;border-top:2px dashed var(--line);margin:0 24px}
+.perf::before,.perf::after{content:"";position:absolute;top:-13px;width:24px;height:24px;border-radius:50%;background:var(--bg);border:1px solid var(--line)}
+.perf::before{left:-36px}.perf::after{right:-36px}
+.ticket .body{padding:20px 28px 26px}
+.rows{display:grid;gap:10px;margin-bottom:22px}
+.rows div{display:flex;justify-content:space-between;gap:16px;align-items:baseline}
+.rows span{color:var(--ink-2)}
+.rows strong{font-weight:700}
+.dl{width:100%;display:flex;justify-content:center;gap:10px;align-items:center;border:0;border-radius:16px;padding:15px 20px;font-weight:700;font-size:1.02rem;background:var(--c);color:#fff;transition:filter .15s,transform .15s}
+.dl:hover{filter:brightness(1.1)}
+.dl:active{transform:scale(.985)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:26px;padding:20px 26px;background:var(--ink);color:#fff;border-radius:var(--radius)}
+.bar p{color:#C4CCE4;font-size:15px}
+.bar strong{display:block;font:700 1.25rem var(--display);color:#fff}
+.bar button{background:#fff;color:var(--ink);border:0;border-radius:14px;padding:13px 24px;font-weight:700;display:inline-flex;gap:10px;align-items:center}
+.bar button:hover{background:var(--ar-soft)}
+
+/* ---------- panels ---------- */
+.panel{margin-top:34px;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:26px 28px}
+.panel h3{font:700 1.5rem var(--display);letter-spacing:-.02em}
+.panel .sub{color:var(--ink-2);margin-top:4px;max-width:70ch}
+.phead{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
+.tabs{display:inline-flex;background:var(--bg);border-radius:14px;padding:4px;gap:2px;margin-top:18px;flex-wrap:wrap}
+.tabs button{border:0;background:transparent;padding:9px 16px;border-radius:11px;font-weight:600;color:var(--ink-2);display:inline-flex;gap:8px;align-items:center}
+.tabs button[aria-selected=true]{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(15,27,61,.14)}
+.pill{font-size:12.5px;font-weight:700;border-radius:999px;padding:1px 9px;background:var(--warn-soft);color:var(--warn)}
+.pill.ok{background:#DCF3E9;color:var(--ok)}
+
+.maplist{margin-top:16px;max-height:400px;overflow:auto;border:1px solid var(--line);border-radius:16px}
+.maprow{display:grid;grid-template-columns:minmax(0,1fr) 70px minmax(150px,230px);gap:14px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line)}
+.maprow:last-child{border-bottom:0}
+.maprow.two{grid-template-columns:minmax(0,1fr) 60px 170px 170px}
+.maprow .n{min-width:0}
+.maprow .n strong{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.maprow .n span{font-size:13px;color:var(--ink-3)}
+.maprow .c{color:var(--ink-2);font-size:14px;text-align:right}
+.maprow.hd{position:sticky;top:0;background:#F6F8FC;font-size:13.5px;font-weight:600;color:var(--ink-2);z-index:1}
+input[type=text]{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:8px 12px;background:#fff;transition:border-color .15s,background .15s}
+input[type=text]:focus{outline:none;border-color:var(--ar);box-shadow:0 0 0 3px var(--ar-soft)}
+.maprow.need input{background:var(--warn-soft);border-color:#F0C77A}
+.maprow.ok input{border-color:#9ED8C1}
+.toolbar{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;align-items:center}
+.toolbar .hint{color:var(--ink-2);font-size:14.5px}
+.solid{background:var(--ink);color:#fff;border:0;border-radius:12px;padding:10px 18px;font-weight:600}
+.solid:hover{background:#1c2c5c}
+
+.tablewrap{margin-top:16px;overflow:auto;max-height:440px;border:1px solid var(--line);border-radius:16px}
+table{border-collapse:separate;border-spacing:0;font-size:14px;min-width:100%}
+th,td{padding:9px 14px;white-space:nowrap;text-align:left;border-bottom:1px solid #E7ECF6;max-width:340px;overflow:hidden;text-overflow:ellipsis}
+th{position:sticky;top:0;background:#F6F8FC;font-weight:700;font-size:13px;color:var(--ink-2);z-index:1}
+td.r{text-align:right}
+td.empty{background:var(--warn-soft)}
+tbody tr:hover td{background:#F6F8FC}
+tbody tr:hover td.empty{background:#FFE7B8}
+.more{padding:12px 16px;color:var(--ink-3);font-size:14px}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed;inset:0;background:rgba(15,27,61,.42);opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(480px,100%);background:#fff;z-index:50;transform:translateX(102%);transition:transform .32s cubic-bezier(.2,.8,.2,1),visibility .32s;display:flex;flex-direction:column;visibility:hidden}
+.drawer.on{transform:none;visibility:visible;box-shadow:-20px 0 60px rgba(15,27,61,.18)}
+.drawer header{padding:24px 28px 14px;display:flex;justify-content:space-between;align-items:center}
+.drawer header h3{font:700 1.5rem var(--display);letter-spacing:-.02em}
+.x{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--line);background:#fff;font-size:20px;line-height:1}
+.dbody{padding:4px 28px 28px;overflow:auto;flex:1}
+.dbody h4{font:700 1.02rem var(--display);margin:22px 0 10px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field label{display:block;font-size:13.5px;font-weight:600;color:var(--ink-2);margin-bottom:5px}
+.field small{display:block;color:var(--ink-3);font-size:12.5px;margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{position:relative}
+.chip input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.chip span{display:inline-block;border:1.5px solid var(--line);border-radius:999px;padding:6px 14px;font-weight:600;font-size:14.5px;color:var(--ink-2);transition:all .15s}
+.chip input:checked+span{background:var(--ink);border-color:var(--ink);color:#fff}
+.chip input:focus-visible+span{outline:3px solid var(--ar);outline-offset:2px}
+.switch{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid #EDF0F8}
+.switch input{width:20px;height:20px;accent-color:var(--ar)}
+.switch span{font-weight:500}
+.switch small{display:block;color:var(--ink-3);font-size:13px;font-weight:400}
+.dfoot{padding:16px 28px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px}
+.preview-desc{margin-top:10px;background:var(--bg);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--ink-2);overflow-wrap:anywhere}
+
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,30px);background:var(--ink);color:#fff;padding:12px 20px;border-radius:14px;font-weight:600;opacity:0;pointer-events:none;transition:all .3s;z-index:60;max-width:90vw}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media(max-width:820px){
+  .tickets{grid-template-columns:1fr}
+  .facts{grid-template-columns:1fr}
+  .maprow,.maprow.two{grid-template-columns:1fr 1fr}
+  .maprow .n{grid-column:1/-1}
+  .maprow .c{text-align:left}
+  main,.top{padding-left:18px;padding-right:18px}
+  .panel{padding:20px 18px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="mark"><i></i><i></i></span>CashX to Acumatica</div>
+  <button class="ghost" id="openSettings" type="button">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    Settings
+  </button>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>One CashX export in. <span>Two</span> Acumatica uploads out.</h1>
+    <p class="lede">Drop the Cost Center Wise Sales Report and the AR Invoice and AP Bill files are filled for you: invoice numbers, line numbers, dates, post period, totals and descriptions.</p>
+  </section>
+
+  <div class="drop" id="drop" data-state="idle" tabindex="0" role="button" aria-label="Upload the CashX export file">
+    <div class="view v-idle">
+      <div class="sheets" aria-hidden="true"><i></i><i></i></div>
+      <h2>Drag the CashX export here</h2>
+      <p>or <u>browse for the .xlsx file</u></p>
+      <div class="err" id="err" role="alert"></div>
+    </div>
+    <div class="view v-busy">
+      <ul class="steps" id="steps">
+        <li><b></b>Reading the CashX report</li>
+        <li><b></b>Repairing swapped invoice dates</li>
+        <li><b></b>Building AR invoices</li>
+        <li><b></b>Building AP bills</li>
+      </ul>
+    </div>
+    <div class="view v-ready">
+      <div class="filebar">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13l6 5M15 13l-6 5"/></svg></div>
+        <div class="meta"><strong id="fname"></strong><span id="fmeta"></span></div>
+        <button class="ghost" id="replace" type="button">Use a different file</button>
+      </div>
+    </div>
+  </div>
+  <input type="file" id="file" accept=".xlsx,.xlsm" hidden>
+
+  <div class="facts" id="facts">
+    <div><strong>Dates repaired</strong><span>CashX flips day and month on many invoices. They are put back to the real invoice date.</span></div>
+    <div><strong>Post period set</strong><span>Current month minus three months, changeable in Settings.</span></div>
+    <div><strong>Customers matched</strong><span>Map CashX clients once, or import your Acumatica customer list. It is remembered next time.</span></div>
+  </div>
+
+  <section id="results" hidden>
+    <div class="tickets" id="tickets"></div>
+
+    <div class="bar">
+      <div><strong id="barTitle"></strong><p id="barSub"></p></div>
+      <button id="dlBoth" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>
+        Download both files
+      </button>
+    </div>
+
+    <section class="panel" id="review">
+      <div class="phead">
+        <div>
+          <h3>Check the IDs</h3>
+          <p class="sub">Acumatica needs exact IDs. Fill what is empty and both files update instantly. Your answers are saved in this browser.</p>
+        </div>
+        <div class="toolbar" style="margin-top:0">
+          <button class="solid" id="importCust" type="button">Import Acumatica customer list</button>
+          <input type="file" id="custFile" accept=".xlsx,.xlsm" hidden>
+        </div>
+      </div>
+      <div class="tabs" role="tablist" id="reviewTabs"></div>
+      <div id="reviewBody"></div>
+    </section>
+
+    <section class="panel">
+      <div class="phead">
+        <div><h3>Preview</h3><p class="sub" id="previewSub"></p></div>
+      </div>
+      <div class="tabs" role="tablist" id="previewTabs">
+        <button role="tab" data-t="ar" aria-selected="true">AR Invoices</button>
+        <button role="tab" data-t="ap" aria-selected="false">AP Bills</button>
+      </div>
+      <div class="tablewrap" id="tableWrap"></div>
+    </section>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Settings" aria-hidden="true">
+  <header><h3>Settings</h3><button class="x" id="closeSettings" type="button" aria-label="Close settings">&times;</button></header>
+  <div class="dbody" id="dbody"></div>
+  <div class="dfoot">
+    <button class="ghost" id="resetAll" type="button">Reset to defaults</button>
+    <button class="solid" id="doneSettings" type="button">Done</button>
+  </div>
+</aside>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="engine.js"></script>
+<script>
+(() => {
+"use strict";
+const E = CashXEngine;
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fmt = (n) => Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtInt = (n) => Number(n).toLocaleString("en-US");
+
+/* ---------- state + persistence ---------- */
+const KEY = "cashx.v1";
+const blank = () => ({ settings: {}, customers: {}, vendors: {}, arItems: {}, apItems: {}, acumatica: [] });
+const state = { persist: blank(), parsed: null, fileName: "", result: null, previewTab: "ar", reviewTab: "customers", reviewLists: null };
+try { Object.assign(state.persist, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state.persist)); } catch (e) {} };
+const settings = () => Object.assign({}, E.DEFAULTS, state.persist.settings);
+
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 3200);
+}
+
+/* ---------- drop zone ---------- */
+const drop = $("#drop"), fileInput = $("#file");
+const setState = (s) => (drop.dataset.state = s);
+drop.addEventListener("click", (e) => { if (drop.dataset.state !== "busy" && drop.dataset.state !== "ready") fileInput.click(); });
+drop.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && drop.dataset.state !== "busy" && drop.dataset.state !== "ready") { e.preventDefault(); fileInput.click(); } });
+$("#replace").addEventListener("click", (e) => { e.stopPropagation(); fileInput.click(); });
+["dragenter", "dragover"].forEach((ev) => window.addEventListener(ev, (e) => { e.preventDefault(); if (drop.dataset.state !== "busy") drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => window.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" || e.target === document.documentElement || !e.relatedTarget) drop.classList.remove("over"); }));
+window.addEventListener("drop", (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleFile(f); });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); fileInput.value = ""; });
+
+async function readWorkbook(file) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await file.arrayBuffer());
+  return wb;
+}
+
+async function handleFile(file) {
+  if (!/\.xls[xm]$/i.test(file.name)) { fail("Please use an Excel .xlsx file. (If it is an old .xls, open it in Excel and save as .xlsx first.)"); return; }
+  setState("busy");
+  const items = [...$("#steps").children];
+  items.forEach((li) => (li.className = ""));
+  const step = async (i, work) => { items[i].className = "run"; const [out] = await Promise.all([Promise.resolve().then(work), sleep(380)]); items[i].className = "done"; return out; };
+  try {
+    const wb = await step(0, () => readWorkbook(file));
+    state.parsed = E.parseCashX(wb);
+    state.fileName = file.name;
+    await step(1, () => {});
+    await step(2, () => rebuild(false));
+    await step(3, () => {});
+    await sleep(150);
+    showReady();
+  } catch (err) {
+    console.error(err);
+    fail(err.message || "That file couldn't be read.");
+  }
+}
+function fail(msg) { $("#err").textContent = msg; setState("error"); }
+
+function showReady() {
+  const p = state.parsed, s = state.result.stats;
+  $("#fname").textContent = state.fileName;
+  $("#fmeta").textContent = `${fmtInt(p.lines.length)} CashX lines read` + (p.meta.reportRange ? ` · ${p.meta.reportRange.replace(/^From Invoice Date /, "")}` : "");
+  setState("ready");
+  $("#facts").classList.add("hide");
+  const res = $("#results");
+  res.hidden = false;
+  renderAll();
+  res.classList.remove("printing"); void res.offsetWidth; res.classList.add("printing");
+  setTimeout(() => res.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+}
+
+/* ---------- build ---------- */
+function rebuild(render = true) {
+  const P = state.persist;
+  state.result = E.build(state.parsed, settings(), { customers: P.customers, vendors: P.vendors, arItems: P.arItems, apItems: P.apItems, acumatica: P.acumatica });
+  if (render) { renderTickets(); renderPreview(); renderReviewHeader(); }
+}
+
+/* ---------- rendering ---------- */
+function renderAll() { renderTickets(); renderPreview(); renderReview(); }
+
+function stamp() { const d = new Date(); return d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0"); }
+const fileNames = () => ({ ar: `AR_INVOICES_CashX_${stamp()}.xlsx`, ap: `AP_BILLS_CashX_${stamp()}.xlsx` });
+
+function renderTickets() {
+  const r = state.result, s = r.stats, w = r.warnings, f = fileNames();
+  const dlIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>';
+  const missCust = Object.keys(w.unmappedCustomers).length, missVend = Object.keys(w.unmappedVendors).length;
+  $("#tickets").innerHTML = `
+    <article class="ticket ar">
+      <div class="head"><div class="kind">AR Invoices · Acumatica</div><div class="big num">${fmtInt(s.arInvoices)}<small>invoices</small></div></div>
+      <div class="perf"></div>
+      <div class="body">
+        <div class="rows">
+          <div><span>Lines</span><strong class="num">${fmtInt(s.arRows)}</strong></div>
+          <div><span>Total (LKR)</span><strong class="num">${fmt(s.arTotal)}</strong></div>
+          <div><span>Post period</span><strong class="num">${esc(s.postPeriod)}</strong></div>
+          <div><span>Customers without an ID</span><strong style="color:${missCust ? "var(--warn)" : "var(--ok)"}">${missCust ? missCust + " to fill" : "None"}</strong></div>
+        </div>
+        <button class="dl" data-dl="ar" type="button">${dlIcon}Download ${esc(f.ar)}</button>
+      </div>
+    </article>
+    <article class="ticket ap">
+      <div class="head"><div class="kind">AP Bills · Acumatica</div><div class="big num">${fmtInt(s.apRows)}<small>bills</small></div></div>
+      <div class="perf"></div>
+      <div class="body">
+        <div class="rows">
+          <div><span>Lines</span><strong class="num">${fmtInt(s.apRows)}</strong></div>
+          <div><span>Total (LKR)</span><strong class="num">${fmt(s.apTotal)}</strong></div>
+          <div><span>Post period</span><strong class="num">${esc(s.postPeriod)}</strong></div>
+          <div><span>Suppliers without a vendor ID</span><strong style="color:${missVend ? "var(--warn)" : "var(--ok)"}">${missVend ? missVend + " to fill" : "None"}</strong></div>
+        </div>
+        <button class="dl" data-dl="ap" type="button">${dlIcon}Download ${esc(f.ap)}</button>
+      </div>
+    </article>`;
+  $("#barTitle").textContent = `Gross margin LKR ${fmt(s.margin)}`;
+  const skipped = w.skippedZeroAr + w.skippedZeroAp;
+  const bits = [`AR minus AP`, `${fmtInt(s.swappedDates)} invoice dates repaired`];
+  if (skipped) bits.push(`${skipped} zero-amount lines skipped`);
+  if (w.nonLkr) bits.push(`${w.nonLkr} foreign-currency lines entered as LKR`);
+  $("#barSub").textContent = bits.join(" · ");
+}
+
+function cellText(h, v) {
+  if (v instanceof Date) return `${String(v.getUTCDate()).padStart(2, "0")}/${String(v.getUTCMonth() + 1).padStart(2, "0")}/${v.getUTCFullYear()}`;
+  if (typeof v === "number" && /EXT PRICE|TOTAL AMOUNT/i.test(h)) return fmt(v);
+  return v === null || v === undefined ? "" : String(v);
+}
+function renderPreview() {
+  const kind = state.previewTab, rows = state.result[kind], H = kind === "ar" ? E.AR_HEADERS : E.AP_HEADERS;
+  const idCol = kind === "ar" ? 5 : 5;
+  const LIMIT = 150;
+  $("#previewSub").textContent = `Showing the first ${Math.min(LIMIT, rows.length)} of ${fmtInt(rows.length)} rows. Empty IDs are highlighted.`;
+  $("#tableWrap").innerHTML = `<table><thead><tr>${H.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${
+    rows.slice(0, LIMIT).map((r) => `<tr>${r.map((v, i) => {
+      const empty = i === idCol && v === "";
+      const right = typeof v === "number" && /EXT PRICE|TOTAL AMOUNT/i.test(H[i]);
+      return `<td class="num${empty ? " empty" : ""}${right ? " r" : ""}" title="${esc(cellText(H[i], v))}">${esc(cellText(H[i], v))}</td>`;
+    }).join("")}</tr>`).join("")
+  }</tbody></table>${rows.length > LIMIT ? `<div class="more">+ ${fmtInt(rows.length - LIMIT)} more rows in the download</div>` : ""}`;
+  document.querySelectorAll("#previewTabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.t === kind));
+}
+$("#previewTabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { state.previewTab = b.dataset.t; renderPreview(); } });
+
+/* ----- review (ID mapping) ----- */
+function pendingCounts() {
+  const w = state.result.warnings;
+  return { customers: Object.keys(w.unmappedCustomers).length, vendors: Object.keys(w.unmappedVendors).length, services: 0 };
+}
+function renderReviewHeader() {
+  const c = pendingCounts();
+  const tab = (id, label, n) => `<button role="tab" data-t="${id}" aria-selected="${state.reviewTab === id}">${label} ${n !== null ? (n ? `<span class="pill">${n} empty</span>` : `<span class="pill ok">done</span>`) : ""}</button>`;
+  $("#reviewTabs").innerHTML = tab("customers", "Customers (AR)", c.customers) + tab("vendors", "Vendors (AP)", c.vendors) + tab("items", "Item IDs", null);
+}
+function renderReview() {
+  renderReviewHeader();
+  const L = state.result.lists, k = state.reviewTab, S = settings();
+  state.reviewLists = L;
+  let html = "";
+  if (k === "customers") {
+    html = `<div class="maplist"><div class="maprow hd"><div>CashX client</div><div class="c">Lines</div><div>Acumatica customer ID</div></div>${
+      L.customers.map((c, i) => `<div class="maprow ${c.id ? "ok" : "need"}"><div class="n"><strong title="${esc(c.name)}">${esc(c.name || "(no name)")}</strong><span>${esc(c.code || "no client code")}${c.via === "acumatica" ? " · matched from Acumatica list" : ""}</span></div><div class="c num">${c.rows}</div><div><input type="text" data-k="customers" data-i="${i}" value="${esc(c.id)}" placeholder="e.g. MM" autocomplete="off" spellcheck="false" aria-label="Customer ID for ${esc(c.name)}"></div></div>`).join("")}</div>`;
+  } else if (k === "vendors") {
+    html = `<div class="toolbar"><span class="hint">Airline lines use <b>${esc(S.apDefaultVendor)}</b> automatically. Everything else needs its own vendor, or one fallback in Settings.</span></div><div class="maplist"><div class="maprow hd"><div>CashX supplier</div><div class="c">Lines</div><div>Acumatica vendor ID</div></div>${
+      L.vendors.map((v, i) => `<div class="maprow ${v.id ? "ok" : "need"}"><div class="n"><strong title="${esc(v.name)}">${esc(v.name)}</strong><span>${v.airline ? "airline" : "service supplier"}</span></div><div class="c num">${v.rows}</div><div><input type="text" data-k="vendors" data-i="${i}" value="${esc(v.id)}" placeholder="vendor ID" autocomplete="off" spellcheck="false" aria-label="Vendor ID for ${esc(v.name)}"></div></div>`).join("")}</div>`;
+  } else {
+    html = `<div class="toolbar"><span class="hint">Leave blank to use the defaults (<b>${esc(S.arInvId)}</b> for AR, <b>${esc(S.apInvId)}</b> for AP). Set these if Visa, Insurance, Hotel and so on use other stock items in Acumatica.</span></div><div class="maplist"><div class="maprow two hd"><div>CashX service</div><div class="c">Lines</div><div>AR INV ID</div><div>AP INV ID</div></div>${
+      L.services.map((s, i) => `<div class="maprow two"><div class="n"><strong>${esc(s.name)}</strong></div><div class="c num">${s.rows}</div><div><input type="text" data-k="arItems" data-i="${i}" value="${esc(state.persist.arItems[s.name] || "")}" placeholder="${esc(S.arInvId)}" autocomplete="off" spellcheck="false" aria-label="AR INV ID for ${esc(s.name)}"></div><div><input type="text" data-k="apItems" data-i="${i}" value="${esc(state.persist.apItems[s.name] || "")}" placeholder="${esc(S.apInvId)}" autocomplete="off" spellcheck="false" aria-label="AP INV ID for ${esc(s.name)}"></div></div>`).join("")}</div>`;
+  }
+  $("#reviewBody").innerHTML = html;
+}
+$("#reviewTabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { state.reviewTab = b.dataset.t; renderReview(); } });
+
+$("#reviewBody").addEventListener("change", (e) => {
+  const inp = e.target.closest("input[data-k]"); if (!inp) return;
+  const k = inp.dataset.k, i = +inp.dataset.i, L = state.reviewLists, P = state.persist, val = inp.value.trim();
+  if (k === "customers") { const c = L.customers[i], key = c.code || c.name; val ? (P.customers[key] = val) : delete P.customers[key]; }
+  else if (k === "vendors") { const v = L.vendors[i]; val ? (P.vendors[v.name] = val) : delete P.vendors[v.name]; }
+  else { const s = L.services[i]; const map = P[k]; val ? (map[s.name] = val) : delete map[s.name]; }
+  save(); rebuild();
+  const row = inp.closest(".maprow");
+  if (row && k !== "arItems" && k !== "apItems") { row.classList.toggle("ok", !!val); row.classList.toggle("need", !val); }
+});
+
+/* ----- Acumatica customer list import ----- */
+$("#importCust").addEventListener("click", () => $("#custFile").click());
+$("#custFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const list = E.parseCustomerList(await readWorkbook(f));
+    state.persist.acumatica = list; save();
+    const before = Object.keys(state.result.warnings.unmappedCustomers).length;
+    rebuild(); state.reviewTab = "customers"; renderReview();
+    const after = Object.keys(state.result.warnings.unmappedCustomers).length;
+    toast(`Imported ${fmtInt(list.length)} customers. ${before - after} more clients matched.`);
+  } catch (err) { toast(err.message); }
+});
+
+/* ---------- downloads ---------- */
+async function download(kind) {
+  const wb = E.makeWorkbook(ExcelJS, kind, state.result[kind]);
+  const buf = await wb.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = fileNames()[kind];
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+$("#tickets").addEventListener("click", (e) => { const b = e.target.closest("[data-dl]"); if (b) download(b.dataset.dl).then(() => toast("Downloaded " + fileNames()[b.dataset.dl])); });
+$("#dlBoth").addEventListener("click", async () => { await download("ar"); await sleep(450); await download("ap"); toast("Both files downloaded"); });
+
+/* ---------- settings drawer ---------- */
+const FIELDS = [
+  ["Document", [
+    ["postPeriod", "Post period", "MM-YYYY", () => "Auto: " + E.defaultPostPeriod() + " (today minus 3 months)"],
+    ["currency", "Currency"], ["location", "Location"], ["branch", "Originating branch"], ["destBranch", "Destination branch"], ["subAccount", "Subaccount"],
+  ]],
+  ["AR invoices", [["arDocType", "Doc type"], ["arAccount", "Account"], ["arInvId", "INV ID"], ["arTax", "Tax category"]]],
+  ["AP bills", [["apDocType", "Doc type"], ["apAccount", "Account"], ["apInvId", "INV ID"], ["apTax", "Tax category"],
+    ["apDefaultVendor", "Vendor for airline lines"], ["apFallbackVendor", "Vendor for all other suppliers", "optional", () => "Used when a supplier has no ID in the Vendors tab"]]],
+];
+function renderSettings() {
+  const S = settings();
+  let h = "";
+  FIELDS.forEach(([title, fs]) => {
+    h += `<h4>${title}</h4><div class="fgrid">` + fs.map(([k, label, ph, hint]) => {
+      const val = k === "postPeriod" ? (state.persist.settings.postPeriod || "") : S[k];
+      return `<div class="field"><label for="f_${k}">${label}</label><input type="text" id="f_${k}" data-s="${k}" value="${esc(val)}" placeholder="${esc(ph || "")}" autocomplete="off" spellcheck="false">${hint ? `<small>${esc(hint())}</small>` : ""}</div>`;
+    }).join("") + `</div>`;
+  });
+  h += `<h4>Description text</h4><p class="sub" style="font-size:14px;color:var(--ink-2);margin-bottom:10px">Pick the CashX fields joined with " / " into DOC DESCRIPTION and LINE DESCRIPTION.</p><div class="chips">` +
+    Object.entries(E.DESC_FIELDS).map(([k, label]) => `<label class="chip"><input type="checkbox" data-d="${k}" ${S.descFields.includes(k) ? "checked" : ""}><span>${label}</span></label>`).join("") + `</div><div class="preview-desc" id="descPreview"></div>`;
+  h += `<h4>Which lines</h4>
+    <label class="switch"><span>Airline tickets<small>CashX type "Airline"</small></span><input type="checkbox" data-b="includeAirline" ${S.includeAirline ? "checked" : ""}></label>
+    <label class="switch"><span>Visa, insurance, hotel and other services<small>CashX type "Misc."</small></span><input type="checkbox" data-b="includeMisc" ${S.includeMisc ? "checked" : ""}></label>
+    <label class="switch"><span>Skip zero-amount lines<small>AR skips zero Gross Fare, AP skips zero Supp. Amount</small></span><input type="checkbox" data-b="skipZero" ${S.skipZero ? "checked" : ""}></label>`;
+  $("#dbody").innerHTML = h;
+  updateDescPreview();
+}
+function updateDescPreview() {
+  const S = settings(), sample = state.parsed && state.parsed.lines[state.parsed.lines.findIndex((l) => /airline/i.test(l.type))] || (state.parsed && state.parsed.lines[0]);
+  const el = $("#descPreview"); if (!el) return;
+  if (!sample) { el.textContent = "Load a CashX file to see a live example."; return; }
+  const parts = S.descFields.map((k) => (k === "serNo" ? String(sample.serNo) : sample[k])).filter((p) => p && p !== "-");
+  el.textContent = parts.join(" / ") || "(empty)";
+}
+function openDrawer() { renderSettings(); $("#drawer").classList.add("on"); $("#scrim").classList.add("on"); $("#drawer").setAttribute("aria-hidden", "false"); setTimeout(() => $("#closeSettings").focus(), 50); }
+function closeDrawer() { $("#drawer").classList.remove("on"); $("#scrim").classList.remove("on"); $("#drawer").setAttribute("aria-hidden", "true"); $("#openSettings").focus(); }
+$("#openSettings").addEventListener("click", openDrawer);
+["closeSettings", "doneSettings", "scrim"].forEach((id) => $("#" + id).addEventListener("click", closeDrawer));
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#drawer").classList.contains("on")) closeDrawer(); });
+
+function applySettings() { if (state.parsed) { rebuild(); if (state.reviewTab === "items") renderReview(); else renderReviewHeader(); } }
+$("#dbody").addEventListener("change", (e) => {
+  const t = e.target, P = state.persist.settings;
+  if (t.dataset.s) {
+    const k = t.dataset.s, v = t.value.trim();
+    if (k === "postPeriod") { if (v && !/^(0[1-9]|1[0-2])-\d{4}$/.test(v)) { toast("Post period must look like 08-2026"); t.value = P.postPeriod || ""; return; } v ? (P[k] = v) : delete P[k]; }
+    else if (k === "subAccount") P[k] = v === "" ? 0 : (isNaN(+v) ? v : +v);
+    else P[k] = v;
+  } else if (t.dataset.b) P[t.dataset.b] = t.checked;
+  else if (t.dataset.d) {
+    const on = [...document.querySelectorAll("[data-d]")].filter((c) => c.checked).map((c) => c.dataset.d);
+    const order = Object.keys(E.DESC_FIELDS);
+    if (!on.length) { t.checked = true; toast("Keep at least one field"); return; }
+    P.descFields = order.filter((k) => on.includes(k));
+    updateDescPreview();
+  }
+  save(); applySettings();
+});
+$("#resetAll").addEventListener("click", () => {
+  if (!confirm("Reset all settings, customer IDs, vendor IDs and the imported customer list?")) return;
+  state.persist = blank(); save(); renderSettings(); applySettings(); if (state.parsed) renderReview(); toast("Everything reset");
+});
+})();
+</script>
+</body>
+</html>
